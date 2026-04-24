@@ -1,0 +1,437 @@
+---
+description: "Linear ticket workflows. Trigger: user says 'create ticket', 'Linear issue', 'update ticket', or references ticket IDs (e.g. TEAM-NNNN format)."
+alwaysApply: false
+universal: true
+---
+
+# Linear MCP Workflows
+
+Use the Linear MCP (`linear`) for issue tracking, project management, and team workflow operations.
+
+## Default Team
+
+Each repo should have its own default Linear team. When the user asks to create, update, or search tickets without specifying a team, call `list_teams` to discover available teams and use the one that maps to the current repo.
+
+## Team Selection
+
+Call `list_teams` to discover the correct team for the current repo. Do not hardcode team IDs or ticket prefixes — different repos map to different teams.
+
+## Project / Milestone / Ticket Hierarchy
+
+Linear has three levels of organization for project work:
+
+- **Project** = top-level container for a body of work (e.g., "DC Rust Agent Runtime"). Has a description, milestones, and a status.
+- **Milestone** = a phase within a project (e.g., "Codex Rust Fork and Provider Abstraction"). Has a description. Milestones are ordered and represent sequential or parallel phases.
+- **Issue (Ticket)** = individual work unit, assigned to a milestone within a project. This is what gets implemented.
+
+### How to Create and Link
+
+1. **Create the project** with `save_project` (name, team, description, priority).
+2. **Create milestones** with `save_milestone` (project name/ID, milestone name, description). Milestones automatically belong to the specified project.
+3. **Create issues** with `save_issue` (omit `id` to create). To link an issue to a project AND milestone, pass BOTH `project` (project name or ID) and `milestone` (milestone name or ID) in the `save_issue` call. The milestone must belong to the project.
+
+### Full Project Spec-Out: Engineering Ticket Standards
+
+When creating a full project with milestones and engineering tickets (as opposed to a single ad-hoc ticket), every ticket description must be written for **zero-knowledge handoff**. The implementing agent has never seen the planning conversation, the plan file, the project context, or any prior decision-making. The ticket IS the specification.
+
+**Every engineering ticket in a spec'd-out project MUST include:**
+
+1. **Summary** -- 1-2 sentences on what this ticket delivers and why it matters.
+2. **Context** -- Why this work exists. How it fits into the broader project. Reference parent project + milestone by link.
+3. **Scope** -- Enumerated list of deliverables. What gets created, what gets modified.
+4. **Technical Approach** -- How to implement. Code snippets, interface definitions, architecture decisions. Enough detail that an agent can start coding without asking questions.
+5. **Decisions and Trade-offs** -- Any contentious decisions made during planning. What was considered and rejected, and why. Prevents re-litigating settled decisions.
+6. **Risks and Open Questions** -- Known risks, edge cases, potential blockers. Questions that couldn't be answered during planning.
+7. **Validation Criteria** -- How to verify the work is complete. Specific tests, commands, behaviors to confirm.
+8. **Dependencies** -- What must be done before this ticket (blocking). What this ticket unblocks (blocked by this).
+9. **Files to Create / Modify** -- Explicit file paths where possible.
+
+**The ticket must be self-contained.** Do not say "see the project description" or "see the plan file." If context from the project is needed, inline it.
+
+## Creating Tickets
+
+1. **Get context first** (parallelize these calls):
+   - `list_teams` to verify the team exists (see table above)
+   - `list_users` - find assignee and anyone to tag
+   - `list_issue_statuses` with the repo's team name - find status like "Backlog"
+
+2. **Create the issue** with `save_issue` (omit `id` to create):
+   - Required: `title`, `team`
+   - **Required**: `assignee` (your name), `estimate` (number, typically 1)
+   - **Required**: `state: "In Progress"` - Always set to In Progress when creating for immediate work
+   - **Required**: `labels` - ALWAYS add 1-2 labels (see below)
+   - **Required**: `description` - MUST include attribution header (see format below)
+   - Optional: `priority`, `project`
+
+### Description Format (New Tickets)
+
+**ALWAYS start the description with this attribution:**
+
+```markdown
+> **This ticket was written by the agent**
+
+**Via [User Full Name]**
+
+---
+
+[Rest of description content here...]
+```
+
+**NOTE:** `@mentions` in API body do NOT trigger notifications (Linear limitation). Use full names instead.
+
+Example:
+```typescript
+description: `> **This ticket was written by the agent**
+
+**Via Jason Sullivan**
+
+---
+
+## Problem
+[description of the issue]
+
+## Proposed Solution
+[technical approach]
+
+## Files to Modify
+- \`path/to/file.ts\`
+`
+
+### Labels (REQUIRED - DO NOT SKIP)
+
+**BEFORE creating any ticket**, call `list_issue_labels` to get the current available labels:
+
+```typescript
+CallMcpTool({
+  server: "linear",
+  toolName: "list_issue_labels",
+  arguments: {}
+})
+```
+
+Then pick 1-2 labels that best match the work:
+- Look at the label names and pick based on work type (bug, feature, improvement, etc.)
+- Look for module-specific labels if the work is scoped to a specific module
+- Pass label names in the `labels` array: `labels: ["Label Name 1", "Label Name 2"]`
+
+**DO NOT hardcode or assume labels exist** - always fetch the current list first.
+
+3. **Tag users for visibility** - use `create_comment`, NOT description mentions:
+   - `@mentions` in descriptions do NOT notify users
+   - After creating the issue, call `create_comment` with `issueId` and `body` containing `@username`
+   - Example: `@michael.sullivan tagging you for visibility`
+
+## MANDATORY: Backup Before Any Edit
+
+**Before modifying ANY existing Linear item (ticket, milestone, or project), you MUST snapshot the original.**
+
+This is non-negotiable. If you overwrite content and have no backup, recovery is impossible.
+
+### Procedure
+
+1. **Fetch the current state** using the appropriate read tool (`get_issue`, `get_project`, `get_milestone`).
+2. **Write the ENTIRE response — verbatim, zero changes, zero truncation, zero summarization — to a local temp file:**
+
+```bash
+mkdir -p /tmp/linear-backups
+# filename: <item-type>-<identifier>-<ISO-date>.json
+# e.g. issue-TEAM-142-2026-03-01.json, project-feature-name-2026-03-01.json
+```
+
+3. **Write the full raw response** (all fields returned by the API) to that file. Do NOT cherry-pick fields, do NOT paraphrase the description, do NOT omit metadata. Dump everything.
+4. **Confirm the file exists and is non-empty** before proceeding with the edit.
+5. Only THEN proceed with `save_issue`, `save_project`, or `save_milestone`.
+
+### What Gets Backed Up
+
+- **Tickets**: full `get_issue` response (title, description, state, labels, assignee, estimate, links, comments — everything returned)
+- **Milestones**: full `get_milestone` response
+- **Projects**: full `get_project` response
+
+### Retention
+
+Backup files in `/tmp/linear-backups/` persist until system cleanup. For important items, mention the backup path in your response so the user can find it.
+
+### No Exceptions
+
+- Applies to `save_issue` with `id`, `save_project` with `id`, `save_milestone` with `id`
+- Does NOT apply to create operations (no `id` = new item, nothing to overwrite)
+- If the fetch call fails, do NOT proceed with the edit — report the error
+
+## Updating Tickets
+
+Use `save_issue` with `id` to update:
+- `id` - issue identifier (e.g., "TEAM-123" for this repo, "OTHER-1234" for other teams)
+- Can update: `title`, `description`, `state`, `assignee`, `estimate`, `labels`, `priority`, `dueDate`, `blocks`, `blockedBy`, `relatedTo`, `duplicateOf`, `links`, etc.
+
+## Amending Tickets, Milestones, and Projects -- Descriptions Only, Never Comments
+
+**When adding requirements, constraints, or architectural detail to existing Linear items: MODIFY THE DESCRIPTION BODY. Do not add comments.**
+
+Comments are immutable (no `update_comment` API), accumulate, and conflict. The description is the single source of truth.
+
+### Rules
+
+1. **Fetch current description** with `get_issue` / `get_project` / `get_milestone`.
+2. **Merge new content into the existing description** at the appropriate location. Do not append a separate "amendment" section -- integrate it where it belongs (e.g., add a new type to the types list, add a new requirement to the requirements section).
+3. **Preserve human-authored content.** If a human wrote the original description, do not rewrite, reorder, or remove their content. Add agent content below a clear separator or within clearly marked subsections.
+4. **Add a revision history footer** (see format below). This is the ONLY way to track what was agent-modified.
+5. **Comments are ONLY for**: notifications (@mentions), discussion questions, ephemeral status updates. Never for permanent requirements or constraints.
+
+### Revision History Footer
+
+Append at the very bottom of the description. One line per revision, date + short phrase. Use `·` separator for compactness.
+
+```markdown
+---
+**Revisions:** 2026-02-22 initial spec · 2026-02-22 added model config types · 2026-02-23 dispatch architecture update
+```
+
+- Each entry: `YYYY-MM-DD short-phrase` (max ~5 words per entry)
+- Same-day revisions on the same line separated by `·`
+- Whole footer stays on 1-3 lines even after tens of modifications
+- If the footer exceeds 3 lines, collapse older entries: `2026-02-22 (3 revisions) · 2026-02-23 dispatch update · ...`
+
+## Post-Planning Ticket Updates (Existing Tickets)
+
+After completing a plan for an EXISTING Linear ticket, with user approval:
+
+### CRITICAL: NEVER Use Comments for Planning
+
+**DO NOT use `create_comment` for planning details.** There is no `update_comment` tool - once created, comments cannot be edited via API. This makes iteration impossible.
+
+**ALWAYS append planning details to the description** using `save_issue` (with `id`), even if the description already has content.
+
+### 1. Fetch Current Ticket State
+```typescript
+CallMcpTool({
+  server: "linear",
+  toolName: "get_issue",
+  arguments: { id: "TEAM-NNNN" }
+})
+```
+
+Save the current description - you'll preserve it and append below.
+
+### 2. Determine Assignment Action
+
+| Scenario | Action |
+|----------|--------|
+| **Unassigned** | Assign to user |
+| **Assigned to someone else** | Reassign to user + add comment tagging original assignee |
+| **Already assigned to user** | No change needed |
+
+### 3. Update Description (ALWAYS - append, never replace)
+
+**Structure:**
+1. Original content stays ON TOP (unchanged)
+2. **STRONG visual separator** (triple `---` with blank lines)
+3. Agent content goes BELOW with clear attribution
+
+**NOTE:** `@mentions` in the `body` parameter do NOT trigger notifications (Linear API limitation). Use full names instead.
+
+```typescript
+CallMcpTool({
+  server: "linear",
+    toolName: "save_issue",
+    arguments: {
+      id: "TEAM-NNNN",
+      assignee: "user@example.com",
+      estimate: 1,
+      state: "In Progress",
+      labels: ["label-id-1", "label-id-2"],
+    description: `${originalDescription}
+
+
+
+---
+
+---
+
+---
+
+
+
+# Planning Analysis
+
+**Via [User Full Name]**
+
+---
+
+### Root Cause
+
+${technicalAnalysis}
+
+### Proposed Fix
+
+${proposedSolution}
+
+### Files to Modify
+
+${filesList}
+
+### Testing Checklist
+
+${testingSteps}`
+  }
+})
+```
+
+**If description was EMPTY**, use this format instead:
+
+```typescript
+description: `> **This ticket was written by the agent**
+
+**Via [User Full Name]**
+
+---
+
+## Root Cause
+
+${technicalAnalysis}
+
+## Proposed Fix
+
+${proposedSolution}
+
+## Files to Modify
+
+${filesList}
+
+## Testing Checklist
+
+${testingSteps}`
+```
+
+### 4. Editing Your Own Content
+
+**Expect to make edits during planning.** When you need to update planning details you wrote:
+
+1. Fetch current description: `get_issue`
+2. Modify the content below the `---` separator (your section)
+3. Update with `save_issue` (pass `id`)
+
+**NEVER create duplicate content.** Edit in place.
+
+### 5. Add Reassignment Comment (ONLY for reassignment notification)
+
+Comments are ONLY for notifying people, not for planning content.
+
+**NOTE:** `@mentions` do NOT work in comments via API (same limitation as descriptions). Use full names.
+
+```typescript
+CallMcpTool({
+  server: "linear",
+  toolName: "create_comment",
+  arguments: {
+    issueId: "TEAM-NNNN",
+    body: "Reassigning to [New Assignee Full Name] for implementation.\n\n[Original Assignee Full Name] - tagging you for visibility."
+  }
+})
+```
+
+### 6. What to Include in Planning Details
+
+- **Root Cause**: Technical explanation of the issue
+- **Proposed Fix**: Code snippets or approach
+- **Files to Modify**: List of affected files
+- **Testing Checklist**: Verification steps
+- **Diagrams/screenshots** from planning (reference URLs if hosted)
+
+**Important**:
+- Use label IDs (UUIDs), not label names when updating
+- Always set `state: "In Progress"` when picking up work
+
+## Creating Tickets from Plan Mode
+
+**When the user asks to create a Linear ticket while in Plan mode (or after a plan has been produced), the ENTIRE plan MUST go into the ticket description. No summarizing, no trimming, no "see plan file for details". The full plan.**
+
+### What "entire plan" means
+
+- Every section from the `.cursor/plans/*.plan.md` file: Context, Approach, Implementation Steps, Files to Modify, Files to Create, Open Questions — ALL of it
+- Code snippets, file paths, line numbers, trade-off analysis — include everything
+- If the plan has YAML frontmatter todos, convert them to a checklist in the description
+
+### How to do it
+
+**Known issue: `CallMcpTool` JSON serialization failure.** Cursor's `CallMcpTool` interface can fail with `"Unterminated string in JSON"` when passing description content that contains backticks (code blocks), template literals (`${}`), nested JSON/quotes, or markdown tables with pipes. The Linear API itself handles any content and any size fine -- the failure is in Cursor's serialization layer before the request even reaches Linear.
+
+**If you get `"Unterminated string in JSON"` from `CallMcpTool`**, use the `linear-extra-utils` MCP instead. It reads the file from disk (no serialization issues) and calls the Linear GraphQL API directly:
+
+```
+CallMcpTool({ server: "linear-extra-utils", toolName: "update_ticket_description", arguments: {
+  ticket_id: "TEAM-123",
+  file_path: ".cursor/plans/foo.plan.md",
+  prepend_attribution: true
+}})
+```
+
+The `prepend_attribution` option adds the standard attribution header. The tool strips YAML frontmatter automatically.
+
+**Workflow when putting a plan into a ticket:**
+1. Create the ticket with `save_issue` (omit `id`; use a short description or try the full plan)
+2. If the MCP tool fails on the description content, immediately fall back to `update_ticket_description` from the `linear-extra-utils` MCP to push the full plan
+3. Do NOT summarize or truncate the plan -- use the MCP tool to get the full content in
+
+**When the MCP tool works fine**, use it directly:
+1. Read the current plan file from `.cursor/plans/`
+2. Convert the full markdown body (everything below the YAML frontmatter) into the ticket description
+3. Prepend the standard attribution header (`> **This ticket was written by the agent**` etc.)
+4. Create the ticket with `save_issue` (omit `id`) using the full content
+
+### Example structure
+
+```typescript
+description: `> **This ticket was written by the agent**
+
+**Via [User Full Name]**
+
+---
+
+${entirePlanMarkdownBody}
+`
+```
+
+### Rules
+
+- **NEVER summarize the plan** — put it ALL in the ticket
+- **NEVER say "see .cursor/plans/ for the full plan"** — the plan goes IN the ticket
+- **NEVER leave out implementation steps, code snippets, or file lists** — they are the most important parts
+- If the plan is long, that's fine — Linear supports long descriptions
+- Still follow all other ticket creation rules (labels, assignee, state, etc.)
+
+## Common Operations
+
+| Tool | Purpose |
+|------|---------|
+| `save_issue` | Create (omit `id`) or update (pass `id`) an issue |
+| `list_issues` | Query issues with filters |
+| `get_issue` | Get single issue details |
+| `save_project` | Create or update a project |
+| `save_milestone` | Create or update a milestone |
+| `create_comment` | Add comment (use for @mentions) |
+| `list_projects` | Find projects in a team |
+| `list_issue_labels` | Get available labels |
+| `list_issue_statuses` | Get workflow states |
+
+## Teams
+
+Call `list_teams` to discover available teams for the current workspace. Do not hardcode team names or IDs.
+
+**Default team for the current repo should be determined by calling `list_teams`.**
+
+## Issue States (Engineering)
+
+| State | Type |
+|-------|------|
+| Backlog | Unstarted |
+| On Deck | Unstarted (prioritized) |
+| In the Hole | Unstarted |
+| In Progress | Started |
+| In Review | Started |
+| Dev Complete | Started |
+| QA Review | Started |
+| Blocked | Started |
+| Done | Completed |
+| Canceled | Canceled |
+| Duplicate | Canceled |
