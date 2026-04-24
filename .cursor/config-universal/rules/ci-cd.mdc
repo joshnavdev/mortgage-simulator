@@ -1,0 +1,103 @@
+---
+description: CI/CD pipelines and GitHub Actions workflows
+globs:
+  - '.github/workflows/**/*.yml'
+  - '.github/workflows/**/*.yaml'
+  - '.github/actions/**/*.yml'
+  - '.github/actions/**/*.yaml'
+alwaysApply: false
+universal: true
+---
+
+# CI/CD Guidelines
+
+Apply these rules when working on GitHub Actions workflows and CI/CD pipelines.
+
+## Runners
+
+**Always use Blacksmith runners** instead of GitHub-hosted runners:
+- `blacksmith-2vcpu-ubuntu-2404` - lightweight jobs (lint, type-check, coverage merge)
+- `blacksmith-4vcpu-ubuntu-2404` - standard jobs (builds, deployments)
+- `blacksmith-8vcpu-ubuntu-2404` - heavy jobs (test shards with coverage)
+
+Never use `ubuntu-latest` or other GitHub-hosted runners.
+
+## Node.js Setup
+
+Use the composite action for consistent Node.js and Yarn setup:
+```yaml
+- uses: ./.github/actions/setup-node-yarn
+```
+
+This action:
+- Sets up Node.js 22.14.0 via `useblacksmith/setup-node@v5`
+- Enables Corepack and activates Yarn 4.9.1
+- Caches `.yarn/cache` with proper cache keys
+- Optionally installs dependencies (default: true)
+
+## Docker Builds
+
+Use standard Docker commands for building and pushing images to ECR:
+```yaml
+- name: Build Docker image of batch job and push to ECR
+  run: |
+    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REPO_URI
+    docker build -t $ECR_REPOSITORY:$IMAGE_TAG -f path/to/Dockerfile .
+    docker tag $ECR_REPOSITORY:$IMAGE_TAG $REPO_URI:$IMAGE_TAG
+    docker push $REPO_URI:$IMAGE_TAG
+```
+
+## AWS Lambda Deployments
+
+Use proper AWS wait commands instead of `sleep`:
+```yaml
+# Good - waits for actual completion
+aws lambda wait function-updated --function-name $FUNCTION_NAME --region $AWS_REGION
+
+# Bad - arbitrary delay
+sleep 10
+```
+
+## Caching Strategy
+
+### Yarn Cache
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: .yarn/cache
+    key: yarn-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+    restore-keys: yarn-${{ runner.os }}-
+```
+
+### Jest Transform Cache
+Use specific config files in the cache key (not yarn.lock):
+```yaml
+key: jest-transform-${{ runner.os }}-${{ hashFiles('babel.jest.config.js', 'jest.config.js', 'tsconfig.json') }}
+```
+
+## Matrix Jobs
+
+Always set `fail-fast: false` for matrix strategies to let all shards complete:
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    shard: [1, 2, 3, 4]
+```
+
+## Artifacts
+
+Set appropriate retention for temporary artifacts:
+```yaml
+- uses: actions/upload-artifact@v4
+  with:
+    name: coverage-${{ matrix.shard }}
+    path: coverage/
+    retention-days: 1  # Short retention for CI artifacts
+```
+
+## Conditional Execution
+
+- Use `if: ${{ success() }}` for jobs that should only run when dependencies succeed
+- Use `if: ${{ !cancelled() }}` sparingly, only when you need results regardless of prior failures
+- Use `if: ${{ failure() }}` for notification jobs

@@ -1,0 +1,142 @@
+---
+description: AI/ML integrations with LangChain, LangGraph, and model providers
+globs:
+  - '**/*.ts'
+  - 'utils/common/ai/**/*.ts'
+  - 'utils/common/llm/**/*.ts'
+  - ''
+  - ''
+  - ''
+  - ''
+  - ''
+alwaysApply: false
+universal: true
+---
+
+# AI/ML Development Guidelines
+
+Apply these rules when working with LangChain, LangGraph, and AI model integrations.
+
+## Model Providers
+
+### Supported Providers
+- **OpenAI**: GPT-4, GPT-4o, GPT-4o-mini via `@langchain/openai`
+- **Azure OpenAI**: Enterprise deployments via `@langchain/azure-openai`
+- **Anthropic**: Claude models via `@langchain/anthropic`
+- **Google**: Gemini models via `@langchain/google-genai`
+- **Perplexity**: Online/search models via API
+
+### Model Selection
+- Use GPT-4o-mini or Claude Haiku for high-volume, simple tasks
+- Use GPT-4o or Claude Sonnet for complex reasoning
+- Use GPT-4 or Claude Opus for critical decisions requiring highest accuracy
+- Consider cost vs. quality tradeoffs for each use case
+
+### Provider Configuration
+- Store API keys in environment variables, never in code
+- Use model-agnostic abstractions where possible
+- Implement fallback providers for resilience
+- Set appropriate timeouts for each provider
+
+## LangChain Patterns
+
+### Chain Construction
+- Use LCEL (LangChain Expression Language) for chain composition
+- Prefer `RunnableSequence` over legacy `LLMChain`
+- Use `RunnablePassthrough` for data forwarding
+- Implement `RunnableLambda` for custom transformations
+
+### Prompts
+- Store prompts in dedicated template files or constants
+- Use `ChatPromptTemplate.fromMessages()` for chat models
+- Include system message with clear role definition
+- Use few-shot examples for complex tasks
+- Implement prompt versioning for production prompts
+
+### Memory and Context
+- Use `BufferMemory` for simple conversational context
+- Implement `ConversationSummaryMemory` for long conversations
+- Consider `VectorStoreRetrieverMemory` for semantic retrieval
+- Clear memory appropriately between sessions
+
+### Output Parsing
+- Use `StructuredOutputParser` with Zod schemas for typed responses
+- Implement `OutputFixingParser` for resilience
+- Validate parsed outputs before use
+- Handle parsing failures gracefully
+
+## LangGraph Patterns
+
+### Graph Construction
+- Define clear state schemas with TypeScript interfaces
+- Use descriptive node names that reflect their purpose
+- Keep node functions focused and single-purpose
+- Implement conditional edges for branching logic
+
+### State Management
+- Use immutable state updates
+- Define clear state transitions
+- Log state changes for debugging
+- Implement checkpointing for long-running graphs
+
+### Error Handling in Graphs
+- Add error handling nodes for recovery
+- Implement retry logic for transient failures
+- Use fallback paths for graceful degradation
+- Log graph execution traces
+
+## Vector Stores and Embeddings
+
+### Embedding Models
+- Use `text-embedding-3-small` for cost efficiency
+- Use `text-embedding-3-large` for higher quality
+- Cache embeddings when content is static
+- Batch embedding requests for efficiency
+
+### Vector Store Operations
+- Use appropriate similarity thresholds
+- Implement metadata filtering for scoped searches
+- Monitor index size and performance
+- Clean up stale vectors periodically
+
+## Streaming and Real-time
+
+### Streaming Responses
+- Use `streamEvents()` for granular control
+- Implement proper SSE (Server-Sent Events) formatting
+- Handle client disconnections gracefully
+- Send heartbeats for long operations
+
+### Token Management
+- Track token usage for cost monitoring
+- Implement token limits per request/user
+- Use streaming to show progress for long responses
+- Handle context window limits gracefully
+
+## Safety and Quality
+
+### Content Moderation
+- Implement input validation before sending to models
+- Filter or flag potentially harmful outputs
+- Log moderation events for review
+- Use model-specific safety settings where available
+
+### Hallucination Mitigation
+- Ground responses in retrieved context (RAG)
+- Implement fact-checking for critical information
+- Use lower temperature for factual tasks
+- Provide source citations when possible
+
+### Testing AI Components
+- Mock LLM calls in unit tests
+- Use deterministic seeds where available
+- Test edge cases (empty input, long input, special characters)
+- Implement evaluation metrics for quality
+
+## Cost Optimization
+
+- Cache identical requests
+- Use cheaper models for preprocessing/filtering
+- Implement request batching where appropriate
+- Monitor and alert on unusual usage patterns
+- Set spending limits per user/tenant

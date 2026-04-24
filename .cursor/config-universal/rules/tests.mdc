@@ -1,0 +1,195 @@
+---
+description: Unit tests
+globs:
+  - 'tests/**'
+alwaysApply: false
+universal: true
+---
+
+# Test Writing Guidelines
+
+Apply these rules from the start when writing any tests.
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `yarn test:single <filepath>` | Run a single test file |
+| `yarn test:verbose <filepath>` | Run without --silent flag |
+| `yarn test-changed` | Run tests for changed files only |
+| `yarn test` | Run full test suite |
+| `yarn type-check:files <paths>` | Type-check specific files/directories |
+| `yarn type-check:tests` | Type-check only test files |
+| `yarn dead-code` | Dead code check (knip) |
+| `yarn dep-check` | Dependency boundary check |
+| `yarn lint:bash` | Bash script lint (shellcheck) |
+| `yarn ls-lint` | File naming conventions (kebab-case) |
+| `yarn sort-pkg` | Package.json sort order |
+
+## File Structure
+
+- Tests must be in `tests/unit-tests/<path mirroring source folder structure>`
+
+## Handling Failures
+
+- **Coverage failures**: Write comprehensive tests to meet required thresholds
+- **Test failures**: Fix ALL failing tests, not just one
+- **Presumption**: Fix the test code, NOT source functionality
+- **Exception**: If you discover a legitimate bug in source code, STOP and ask the user before proceeding
+
+## Test Design Principles
+
+### What to Test
+- Edge cases
+- Error handling
+- Complex logic paths
+- Data transformations
+- Integration points
+
+### What NOT to Write
+- Import tests ("should export function X")
+- Log message presence tests (unless testing a logging utility)
+- Function existence/type checks
+- Obvious behavior tests ("empty array has length 0")
+- Smoke tests that call functions without meaningful assertions
+- Timeout-based tests (`setTimeout`, `jest.advanceTimersByTime`) - tests should be deterministic and not rely on timing. Use event-driven assertions, mock timers properly, or test state changes directly instead of waiting for timeouts.
+
+## CRITICAL: No Writes to the Real Repository
+
+**Tests must NEVER write files, create directories, or symlink into the actual working repository.** All test file I/O must target temp directories created via `os.tmpdir()` or the test harness.
+
+### Use `testDir.projectDir` for project-root paths
+
+`setupTestStateDir()` in `tests/helpers/test-harness.ts` creates:
+- `testDir.stateDir` — temp dir for state files (`DC_STATE_DIR`)
+- `testDir.projectDir` — temp dir for project files (`DC_PROJECT_ROOT`, `DC_EXTENSION_ROOT`)
+
+Both are cleaned up automatically in `afterEach` via `testDir.cleanup()`.
+
+**When a test needs a plan file, config file, or any file that production code resolves via `getProjectRoot()`:**
+```typescript
+// ✅ RIGHT — write to temp project dir
+const planPath = path.join(testDir.projectDir, 'my-plan.md');
+fs.writeFileSync(planPath, '# Plan\nContent.');
+
+// ❌ WRONG — writes to the real repo
+const planPath = path.join(process.cwd(), 'my-plan.md');
+fs.writeFileSync(planPath, '# Plan\nContent.');
+```
+
+**Prohibited patterns:**
+- `path.join(process.cwd(), ...)` followed by `fs.writeFileSync` / `fs.mkdirSync`
+- `fs.writeFileSync(__dirname + '/...')` for anything outside temp dirs
+- Hardcoded paths like `'.claude/plans/...'` resolved against the real repo
+
+## CRITICAL: No Real External Calls
+
+**Tests must NEVER make real calls to external services. No exceptions.**
+
+### Already Globally Mocked (in `jest.setup.js`)
+These are blocked by default - tests will error if they try to call the real service:
+- **LLM APIs**: `getLangchainInferenceModel`, `getLangchainEmbeddingsModel`
+- **Database**: MongoDB/Mongoose connections blocked
+- **AWS**: S3, Lambda, Textract, Batch clients blocked
+- **GCP**: Retail, Storage, AI Platform clients blocked
+- **Azure**: Search clients blocked
+- **Reducto AI**: `getReductoClient`, `submitAndPollReductoJob`, `pollReductoJobStatus`, `uploadFileToReducto`
+
+### What You Must Mock in Your Test
+If your code calls any external service, mock it:
+- Third-party APIs (Stripe, SendGrid, Twilio, etc.)
+- HTTP requests (`fetch`, `axios`)
+- File system operations that touch real files
+- Any service not in the global mocks list above
+
+### How to Override Global Mocks
+Tests that need the real implementation (e.g., testing the LangChain routing logic):
+```typescript
+// At top of test file, BEFORE imports
+jest.unmock('utils/common/langchain/get-langchain-models');
+```
+
+### Why This Matters
+- **Cost**: LLM calls cost money, cloud services cost money
+- **Speed**: Network calls make tests slow (seconds vs milliseconds)
+- **Reliability**: External services fail, rate limit, change behavior
+- **Determinism**: LLM responses are non-deterministic = flaky tests
+- **CI/CD**: Tests must pass without API keys or network access
+
+## Mocking Best Practices
+
+- Check `__mocks__` folders for existing mocks before creating new ones
+- Search with `file_search` pattern `ComponentName __mocks__`
+- Mock at the highest appropriate abstraction level (e.g., `getLangchainInferenceModel` not `openai`)
+- Use `jest.requireActual()` to preserve non-mocked exports when partially mocking a module
+
+## Type Safety in Tests
+
+- **When modifying a type/interface**: Find and update ALL test files that mock or use that type
+- Test mock objects must match actual type definitions exactly - no shortcuts
+- Use `Types.ObjectId` for `_id` fields, not strings (use `new Types.ObjectId()` or `new Types.ObjectId('validhex')`)
+- When a type adds required properties, update all test mocks to include them
+- Run `yarn type-check:tests` to verify test file types before committing
+
+## Coverage
+
+- Coverage thresholds defined in `codecov.yml`
+- CI checks patch coverage on PRs (runs full test suite)
+- Use the Codecov MCP to fetch accurate coverage data from the most recent CI run
+- Do NOT rely on local test runs for coverage - they only run a subset of tests
+
+## Post-Change Verification for Tests
+
+After completing ALL queued user messages (wait until the entire queue is processed):
+
+1. **Run tests on any test files you added or modified:**
+   ```bash
+   yarn test:single <test file path>
+   ```
+
+2. **If tests fail, fix them** before proceeding
+
+3. **Then run lint, format, and type-check on ALL modified files** (source files + test files):
+   ```bash
+   yarn lint:fix <all modified files>
+   yarn fmt <all modified files>
+   yarn type-check:files <all modified files>
+   yarn dead-code
+   yarn dep-check
+   yarn type-coverage
+   yarn ls-lint
+   yarn sort-pkg
+   ```
+
+   If you modified `.sh` files: `yarn lint:bash`
+
+- Do NOT run these after every single message - wait until all queued messages have been addressed
+- Fix any errors before considering the round complete
+
+<!-- TODO(DC-199): Mutation testing disabled — Stryker takes 90s+ cold per file, too slow for PR
+     feedback. Re-enable when Stryker supports scoped test execution, a faster JS/TS mutation
+     testing tool becomes available, or incremental caching proves fast enough on real PR workloads.
+     The tooling is fully wired — just uncomment to re-enable.
+
+## Mutation Testing
+
+After writing tests, validate quality with mutation testing:
+
+| Command | Purpose |
+|---|---|
+| `yarn stryker:file <source-file>` | Mutation test a single source file |
+| `yarn stryker` | Full repo mutation test |
+| `yarn stryker:ci` | CI mode with reduced concurrency |
+
+- Mutation score should be >= 30% (enforced threshold, will be ratcheted up)
+- Surviving mutants indicate untested code paths — write tests targeting those lines
+- In the issue fixer pipeline, mutation testing runs automatically as a server-side gate when reporting fixes
+- Do NOT mutate test files — only source files are meaningful targets
+- Cap at 5 source files per run to bound runtime (30-120 seconds per file)
+-->
+
+## Final Checklist
+
+- [ ] All tests pass
+- [ ] Linting errors fixed
+- [ ] Coverage thresholds met

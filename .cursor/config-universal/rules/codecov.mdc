@@ -1,0 +1,62 @@
+---
+description: "Coverage improvement workflow. Trigger: user says 'improve coverage', 'add tests for coverage', 'fix coverage', or PR has failing coverage check."
+globs:
+  - 'codecov.yml'
+  - '.github/workflows/jest.yml'
+alwaysApply: false
+universal: true
+---
+
+# Codecov Guidelines
+
+## Time Management Rules
+
+**NEVER waste time on flaky tests.** Follow strictly:
+
+1. **2-minute rule**: Test fails and not fixed in 2 minutes → DELETE IT
+2. **Target 150%+ buffer**: Need 388 lines → write tests for 600+ lines
+3. **Breadth over depth**: 10 files shallowly > 1 file deeply
+4. **Skip complex mocking**: >3 mocks → find easier file
+
+**Avoid:** 10+ min on one test, complex integration tests, exhaustive single-file coverage, chasing 100%.
+
+**Do:** 5-10 simple tests across files, skip hard files, focus pure functions, test error paths.
+
+## MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `get_pr_coverage` | **First** - PR patch coverage + per-file breakdown |
+| `get_file_coverage` | Line-by-line coverage for a file |
+| `run_tests_with_coverage` | Run tests locally with coverage |
+| `verify_local_coverage` | Compare local vs remote (needs `base_commit`) |
+
+## PR Ownership Check
+
+**Before taking action**, determine if user's OWN PR or SOMEONE ELSE's:
+
+| Scenario | Write Tests? | Report Coverage? |
+|----------|-------------|------------------|
+| **Own PR** | YES | YES |
+| **Someone else's** | NO | YES (local only) |
+
+## Default Behavior
+
+1. Call `get_pr_coverage(pull_id=XXXX)`
+2. Check `gap_analysis.passing`:
+   - **Passing**: STOP unless user asks for more
+   - **Failing**: Use coverage-improvement skill workflow
+
+## Key Concepts
+
+**Patch coverage** = covered lines in patch / coverable lines in patch
+
+Target: Exceed threshold by ~1 percentage point. Get threshold from `codecov.yml`.
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `yarn test:single <file>` | Single test file |
+| `yarn test:single:coverage <file>` | With coverage |
+| `yarn test-changed` | Changed files only |

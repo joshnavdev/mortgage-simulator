@@ -1,0 +1,195 @@
+---
+description: Universal workspace guidelines that apply to all files
+alwaysApply: true
+universal: true
+---
+
+# General Development Guidelines
+
+**Use relative paths for all file edits.**
+
+## Code Quality
+
+- Fix all lint/type errors before completing work
+- Prefer explicit TypeScript types over `any`
+- Parallelize with `Promise.all()` - avoid sequential `await` loops
+- Use `.map()`, `.filter()`, `.reduce()` over `for` loops
+- Delete dead code immediately
+- **No inline code in strings**
+- **No `as` type assertions**
+- **Max 500 lines per TypeScript file** (excluding blanks and comments) - if a file hits 500 lines, it needs refactoring. Split by responsibility.
+
+## No Type Assertions (`as`)
+
+**NEVER use `as` to cast types.** Type assertions mask real type errors instead of fixing them.
+
+**Allowed exceptions:** `as const` (narrowing), third-party library boundaries with a comment explaining WHY.
+
+**If TypeScript cannot prove the type:** use a type guard, generic return type, or fix the type definition.
+
+## Zero Cruft on Same Branch
+
+**If code was introduced on the CURRENT branch (not on `main`), there is ZERO tolerance for cruft. Delete it, do not bandage it.**
+
+- **NO** `_unusedVar` underscore prefixes - remove entirely, fix all callers
+- **NO** `@deprecated` annotations - delete outright
+- **NO** backward compat shims - no consumers to protect
+- **NO** commented-out code - git has history
+- **NO** unused imports, parameters, or stubs - delete them
+
+Check with: `git log --oneline main..HEAD -- <file>` (commits = same-branch = delete it)
+
+### Pre-Existing Issues — ZERO TOLERANCE
+
+**If you touch a file and find ANY issue — lint error, type error, bug, code smell, dead code — fix it. Period.**
+
+This is not optional. This is not "out of scope." This is not "pre-existing so not my problem."
+
+- **Lint errors block commits.** Pre-existing lint errors in a file you touched WILL block YOUR commit. Fix them or you cannot ship.
+- **Type errors break builds.** Pre-existing type errors in files you touched WILL cause CI failures. Fix them.
+- **It does not matter who introduced the issue.** If the error was on `main` for six months, and you touched the file, you now own it.
+- **It does not matter if you introduced it.** Same rule applies either way.
+- **"I didn't cause it" is not a valid excuse.** The only valid response to discovering an issue is fixing it.
+- **Run verification checks on your modified files** and fix everything that fails — not just the things you think you caused.
+
+If a file exceeds the max-lines limit, split it. If a function has a type error, fix the types. If an import is unused, remove it. No exceptions.
+
+## Long-Running Commands - Sub-Agents
+
+**ALWAYS delegate long-running commands** (test suites, linting, builds, type-checking) **to a sub-agent** to free the main conversation. Pick an appropriate agent from the available plugin agents.
+
+## Linting and Formatting
+
+Fix all lint and type errors before completing work. Use the project's configured linter and formatter — run them on modified files only, not the whole repo.
+
+## Type-Checking Commands
+
+**NEVER run `tsc`, `tsc --noEmit`, `npx tsc`, or any raw `tsc` invocation.** The project uses `tsgo` (Go-based TypeScript checker). The correct commands are:
+
+| Scope | Command | When to use |
+|-------|---------|-------------|
+| Specific files | `yarn type-check:files path/to/file1.ts path/to/file2.tsx` | **Default — use this for post-change verification** |
+| Whole project | `yarn type-check` | Only when explicitly asked or for full CI validation |
+
+- `yarn type-check:files` accepts relative or absolute paths and checks only those files against `tsconfig.json`
+- `yarn type-check` runs `tsgo --noEmit` on the full project — fast but unnecessary for per-file checks
+- **NEVER run type-checking on the whole codebase unless explicitly asked** — always scope to modified files
+
+## Post-Change Verification
+
+After completing ALL queued messages, run lint, format, and type-check on the specific files you modified. If the project has additional quality scripts (dead-code detection, dependency checks, etc.), run those too.
+
+The verification command for type-checking is: `yarn type-check:files <list of modified .ts/.tsx files>`
+
+"Modified files" means only the `.ts`/`.tsx` files touched in the current task — not the whole repo.
+
+## Imports
+
+Never use relative paths except within the same folder.
+
+## Git Operations
+
+**NEVER EVER use `git commit -m`**. The project has pre-commit hooks that auto-generate commit messages.
+
+- **In normal mode**: NEVER commit, push, or offer to do either unless explicitly asked
+- **NEVER use `git add -A` or `git add .`** - stage specific files only
+- NEVER run `git push --force`, `git reset --hard`, or destructive operations (`DROP TABLE`, `DROP DATABASE`, recursive `rm -rf` on system paths)
+- **NEVER use `git stash`** — not `git stash push`, `pop`, `apply`, `drop`, or ANY subcommand. Not directly, not in a script, not in a subagent, not "temporarily," not "just to save work," not for ANY reason. `git stash` causes merge conflicts, loses work, and creates phantom state that blocks other operations. If you need to save uncommitted changes, **commit them** on a branch. If you need a clean working tree, **commit first**. Any agent that runs `git stash` is broken.
+- Workflow: `git status` then `git add <specific files>` then `git commit`
+
+## External Services
+
+Never run scripts or write to third-party services (AWS, GCP, MongoDB) without explicit permission.
+
+## Bugfixes and Performance
+
+- Bugfixes: Include % confidence score (0-100)
+- Performance: Include estimates (% improvement, ms saved)
+
+## Tests
+
+- Do not create/update tests unless instructed
+- If code change does not fix failing test, revert before trying new approach
+
+## Third-Party Libraries
+
+Provide evidence that imports/methods are not hallucinated (docs link, search result).
+
+**Minimum adoption thresholds — NEVER recommend or install:**
+- npm packages with **< 1,000 weekly downloads**
+- GitHub repos with **< 100 stars**
+- Forks with negligible adoption over the original (check npm downloads, not just GitHub stars)
+- Packages last published **> 12 months ago** without active maintenance
+
+**Before recommending any library, MCP server, or tool**, verify its adoption by checking npm download counts, GitHub stars, last commit date, and open issue count. If it doesn't meet the thresholds, say so and recommend the closest viable alternative — or say none exists.
+
+## No String-Based Type Discrimination
+
+NEVER use string parsing (`.includes()`, `.toLowerCase()`, regex) to determine types, statuses, or routing. Use typed const enums (`as const` objects) validated at the boundary (Zod schemas).
+
+## No Hardcoded Tool Names
+
+NEVER hardcode a tool name string when a tool class with `.toolName` exists. Import the class, use `.toolName`.
+
+## No Multi-Line Inline Code in Strings
+
+NEVER embed multi-line code inside a string argument. Extract to a file. Allowed: single-expression one-liners and `package.json` scripts.
+
+## NEVER Correct Model Strings
+
+**Your training data is STALE.** The codebase uses models NEWER than your knowledge cutoff. NEVER claim a model string is fake, replace with an older one, or suggest downgrading.
+
+## No Deferred Work
+
+**Every plan MUST be fully implemented.** No future work unless the human explicitly approved it during planning.
+
+## Agentic Execution — No Human-Time Framing
+
+**All work is executed agentically unless explicitly stated otherwise.** A human may caddy or supervise, but the execution model is agents, not developer-months.
+
+- **NEVER estimate in human time** (days, weeks, months, sprints, quarters). Do not say "6-12 months for 2-3 engineers."
+- **NEVER assume human developers** are doing the work. Do not reference "your team," "team expertise," or "learning curve."
+- **NEVER defer work based on human constraints** — cognitive load, time of day, fatigue, "it's getting late," or "we can revisit this later." These are not valid reasons.
+- **Only valid reason to split work into separate units**: conceptual separation of concerns — i.e., the work is logically distinct and benefits from being independently scoped, tested, or composed.
+- **Scope and complexity** are described by dependency depth, surface area, number of integration points, and risk — not by calendar time.
+
+## No Prose Instructions in Tool/Subagent Code
+
+**ALL decision logic MUST be in TypeScript, NEVER in prompt strings or tool response messages.** Use structured nextStep/suggestedCalls for next actions. See building-mcps.mdc for examples.
+
+## AI Guardrails — Ratchet, Never Loosen
+
+TypeScript and oxlint are configured at **maximum strictness** specifically to constrain AI-generated code. Every compiler flag and lint rule is a guardrail that prevents AI agents from taking shortcuts.
+
+**When you find a bug or weakness that stricter config would have caught:**
+
+1. **Fix the bug itself.**
+2. **Add enforcement** — enable the relevant TypeScript compiler option in `tsconfig.json` or add/tighten the oxlint rule in `.oxlintrc.json` so the class of bug is blocked permanently.
+3. **Fix any new errors** the stricter config surfaces across the codebase.
+4. **Do not break third-party libraries** — if a new flag causes errors only in library types, add a targeted override for those files rather than backing off the flag.
+
+**What "ratchet" means:** Strictness only moves in one direction. NEVER disable, weaken, or remove a TypeScript strict flag or oxlint rule. If a rule causes friction, fix the code — do not relax the rule. The only exception is a targeted `oxlint-disable-next-line` with an explanation for a specific line.
+
+The full list of enforced flags lives in `guardrails.mdc` — load it when touching config files. Do not regress any flag.
+
+## Adversarial Audits — READ-ONLY by Default
+
+When asked to do an "adversarial audit," "destroy test," "break this," or similar adversarial review:
+
+1. **NEVER delete files, remove functionality, or replace working code with error stubs**
+2. **NEVER modify source files during an audit** — audits are READ-ONLY analysis
+3. **Report findings as text** — describe bugs, vulnerabilities, and edge cases in your response
+4. **Only fix code when explicitly asked to fix**, in a SEPARATE step after the audit report
+5. **Sub-agents dispatched for audits MUST use `readonly: true`** — if the Task tool supports it
+
+"Destroy" means "find every way it can fail." It does NOT mean "delete the file." "Break this" means "identify breaking edge cases." It does NOT mean "introduce breaking changes."
+
+This rule exists because a sub-agent once interpreted "DESTROY cursor-subagent.ts" as a literal instruction, deleted the file, replaced the dispatch case with an error stub, rewrote tests to expect failure, and modified documentation to say "removed." This caused production-path damage that required manual repair.
+
+## Prohibited
+
+- "Example" implementation files or "Plan" readme files
+- Re-exporting from files (import from source directly) except for files whose primary purpose is to be re-exported without any other functionality, for example: barrel files like `app/(v2)/chatbot/sdk.ts`
+- Suggesting dev server restarts (Next.js has hot reload)
+- Hardcoded URL paths (use dynamic discovery)
+- Asking about git commits/pushes

@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "./hooks/serena-remind.sh"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "./hooks/block-gh-cli.sh",
+        "matcher": "(^|[;&|] *)gh (api|pr|issue|run|release)($|[ ;&|])"
+      },
+      {
+        "command": "./hooks/block-git-write.sh",
+        "matcher": "(^|[;&|] *)git (add|commit|push|reset|switch|restore|checkout)($|[ ;&|-])"
+      },
+      {
+        "command": "./hooks/block-git-write.sh",
+        "matcher": "(^|[;&|] *)git stash($|[;&|]| +(push|pop|drop|apply|clear|save|-[upak]|--[a-z])| +-)"
+      },
+      {
+        "command": "./hooks/block-git-write.sh",
+        "matcher": "(^|[;&|] *)git branch +-[dD]($|[ ;&|])"
+      },
+      {
+        "command": "./hooks/block-mongo.sh",
+        "matcher": "(^|[;&|] *)(mongosh|mongo)($|[ ;&|])"
+      },
+      {
+        "command": "./hooks/block-sudo.sh",
+        "matcher": "(^|[;&|] *)sudo "
+      },
+      {
+        "command": "./hooks/block-kill.sh",
+        "matcher": "(^|[;&|] *)(kill|killall) "
+      },
+      {
+        "command": "./hooks/block-kill.sh",
+        "matcher": "(^|[;&|] *)pkill +(?!-f\\b)"
+      },
+      {
+        "command": "./hooks/block-publish.sh",
+        "matcher": "(^|[;&|] *)(npm publish|yarn publish)($|[ ;&|])"
+      },
+      {
+        "command": "./hooks/block-dangerous.sh",
+        "matcher": "(^|[;&|] *)(dd if=|shutdown|reboot)"
+      },
+      {
+        "command": "./hooks/block-extension-overwrite.sh",
+        "matcher": "(^|[;&|] *)(cp |cp -|rsync |mv )[^|;]*local\\.dc"
+      },
+      {
+        "command": "./hooks/block-recursive-delete.sh",
+        "matcher": "(^|[;&|] *)rm +((-[a-zA-Z]*[rR])|--recursive)"
+      }
+    ]
+  }
+}

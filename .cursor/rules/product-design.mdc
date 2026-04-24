@@ -1,0 +1,277 @@
+---
+description: "Product design workflow. Trigger: user says 'design', 'spec', 'plan feature', 'new feature', shares Figma link, or wants to create a Linear ticket from requirements."
+alwaysApply: false
+universal: true
+---
+
+# Product Design & Specification Workflow
+
+Use this workflow when the user wants to design a new feature, create specifications, or plan implementation work. This process is collaborative and results in a Linear ticket ready for development.
+
+## When to Activate
+
+- User says "design", "spec", "plan a feature", "new feature", "product design"
+- User shares a Figma link and asks to build something from it
+- User references a Linear ticket and wants to expand/refine it
+- User wants to create implementation plans for a feature
+
+## Required: Switch to Plan Mode
+
+**IMMEDIATELY switch to Plan mode** at the start of any product design session:
+
+```
+SwitchMode(target_mode_id: "plan", explanation: "Starting product design workflow - Plan mode enables collaborative design without premature implementation")
+```
+
+Plan mode is required because:
+- Design work is exploratory and requires discussion
+- We need user input before any implementation decisions
+- Multiple valid approaches exist and need evaluation
+
+## Phase 1: Requirements Gathering
+
+### 1.1 Understand the Request
+
+Ask clarifying questions to understand:
+- **What** is being built (feature, component, page, flow)
+- **Why** it's needed (user problem, business goal)
+- **Who** will use it (user persona, permissions)
+- **Where** it fits (existing page, new route, standalone)
+
+### 1.2 Pull Existing Context
+
+Use available MCPs to gather context:
+
+**Linear MCP** - If a ticket exists or is referenced:
+```
+get_issue(id: "TEAM-XXXX")
+```
+- Pull ticket description, comments, linked issues
+- Check for existing acceptance criteria
+- Identify related tickets in the same project/cycle
+
+**Figma MCP** - ONLY use when:
+1. A Linear ticket contains a Figma link → MUST pull that design
+2. User explicitly provides a Figma link in their prompt
+
+```
+get_figma_data(fileKey: "<key>", nodeId: "<optional>")
+```
+
+**DO NOT** proactively search for or suggest Figma designs. Only pull when a link is explicitly provided.
+
+**GitHub MCP** - If related PRs or issues exist:
+- Pull context from previous implementations
+- Check for related technical decisions
+
+### 1.3 Document Requirements
+
+Create a structured requirements summary:
+```markdown
+## Feature: [Name]
+
+### Problem Statement
+[What problem does this solve?]
+
+### User Stories
+- As a [persona], I want to [action] so that [benefit]
+
+### Acceptance Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+### Out of Scope
+- [What this feature does NOT include]
+```
+
+## Phase 2: Design Exploration
+
+### 2.1 Figma Designs (Only When Linked)
+
+**ONLY if a Figma link was provided** (from Linear ticket or user prompt):
+- Pull the Figma design using `get_figma_data`
+- Extract specifications: colors, spacing, typography, component structure
+- Use Figma as the source of truth for visual design
+
+**If NO Figma link was provided**: Skip this section entirely. Do not ask about Figma.
+
+### 2.2 Design Review Checkpoint
+
+**STOP and confirm with user:**
+```
+Here's the proposed design direction:
+
+1. [Figma design link - if one was provided]
+2. [Key design decisions]
+
+Does this match your vision? Any changes needed before we finalize the spec?
+```
+
+## Phase 3: Technical Planning
+
+### 3.1 Architecture Decisions
+
+Document key technical decisions:
+- **Frontend**: Components needed, state management approach
+- **Backend**: API endpoints, data models, validation
+- **Integration**: Third-party services, existing systems
+
+### 3.2 Implementation Plan
+
+Break down into tasks:
+```markdown
+## Implementation Plan
+
+### Phase 1: Foundation
+- [ ] Task 1 (estimate: Xh)
+- [ ] Task 2 (estimate: Xh)
+
+### Phase 2: Core Feature
+- [ ] Task 3 (estimate: Xh)
+
+### Phase 3: Polish & Testing
+- [ ] Task 4 (estimate: Xh)
+
+**Total Estimate**: X points / X hours
+```
+
+### 3.3 Risk Assessment
+
+Identify potential blockers:
+- Dependencies on other teams/features
+- Technical unknowns
+- Performance considerations
+- Security implications
+
+## Phase 4: Finalize & Create Ticket
+
+### 4.1 Compile Final Specification
+
+Combine all artifacts into a comprehensive spec:
+```markdown
+# [Feature Name] - Technical Specification
+
+## Overview
+[Brief description]
+
+## Requirements
+[From Phase 1]
+
+## Design
+- Figma: [link if provided, otherwise "N/A"]
+- Key decisions: [list]
+
+## Implementation Plan
+[From Phase 3]
+
+## Risks & Mitigations
+[From Phase 3]
+```
+
+### 4.2 Gather Ticket Metadata
+
+**ASK the user** for the following (do not assume):
+
+```
+Before I create the Linear ticket, please confirm:
+
+1. **Assignee**:
+
+   - [ ] Assign to: [specify team member]
+
+2. **Estimate** (in points): ___
+
+3. **Priority**:
+   - [ ] Urgent
+   - [ ] Normal (default)
+
+4. **Status**:
+   - [ ] Backlog (default)
+   - [ ] On Deck
+   - [ ] In the Hole
+
+5. **Labels** (optional): ___
+```
+
+### 4.3 Create Linear Ticket
+
+Use Linear MCP to create the ticket:
+
+```typescript
+// First, get team and user context
+list_teams() // Find "Engineering" team
+list_users() // Find assignee
+
+// Create the ticket (omit id to create)
+save_issue({
+  title: "[Feature Name]",
+  description: `[Full specification markdown]`,
+  team: "Engineering",
+  assignee: "[from user input]",
+  estimate: [from user input],
+  state: "[from user input, default: Backlog]",
+  priority: [urgent ? 1 : 3],
+  labels: [from user input]
+})
+
+// Tag relevant stakeholders for visibility
+create_comment({
+  issueId: "[created ticket ID]",
+  body: "@[stakeholders] - New feature spec ready for review"
+})
+```
+
+### 4.4 Confirmation
+
+Report back to user:
+```
+Created ticket: TEAM-XXXX - [Feature Name]
+[Linear ticket URL]
+
+Assigned to: [assignee]
+Estimate: [X] points
+Status: [status]
+
+Next steps:
+- [ ] Review the ticket in Linear
+- [ ] Add to appropriate cycle if needed
+- [ ] Begin implementation when ready
+```
+
+
+## Quick Reference: MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `get_figma_data` | Pull Figma design specs (ONLY when link provided) |
+| `get_issue` | Get Linear ticket details |
+| `list_issues` | Search Linear tickets |
+| `save_issue` | Create or update Linear ticket |
+| `create_comment` | Add comments/@mentions |
+| `list_teams` | Find Linear teams |
+| `list_users` | Find Linear users |
+| `list_issue_statuses` | Get available statuses |
+
+## Example Session Flow
+
+```
+User: "I want to design a new dashboard for enterprise admins"
+
+Agent: [Switches to Plan mode]
+Agent: "Let me help you design that. A few questions first..."
+[Requirements gathering]
+
+Agent: "Let me pull designs from Figma and explore the codebase..."
+[Requirements gathering + Figma if linked]
+
+Agent: "Here's my proposed approach. Does this direction work?"
+
+User: "Yes, but make the sidebar collapsible"
+
+Agent: "Updated. Ready to finalize the spec and create a ticket?"
+
+User: "Yes, assign it to me, 5 points, normal priority"
+
+Agent: [save_issue with full spec]
+Agent: "Created TEAM-1234. Ready for implementation!"
+```

@@ -1,0 +1,45 @@
+---
+description: Use withAbortTimeout instead of Promise.race for timeouts; enables true cancellation via AbortSignal
+globs: "**/*.ts"
+alwaysApply: false
+universal: true
+---
+
+# Timeout Pattern: Prefer withAbortTimeout Over Promise.race
+
+Do **not** use `Promise.race([longRunningPromise, timeoutPromise])` for timeouts. The long-running operation keeps executing after the timeout "wins"; there is no cancellation.
+
+Use **`withAbortTimeout`** from `utils/core/abort-timeout` so that when the timeout fires, an `AbortSignal` is triggered and the operation can be cancelled (e.g. HTTP request aborted).
+
+## Bad
+
+```typescript
+const result = await Promise.race([
+  someApiCall(),
+  new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS)),
+]);
+if (!result) {
+  // timeout — but someApiCall() is still running
+  return null;
+}
+```
+
+## Good
+
+```typescript
+import { withAbortTimeout } from 'utils/core/abort-timeout';
+
+const result = await withAbortTimeout(
+  async (signal) => {
+    // Pass signal when the API supports it (e.g. requestOptions.abortSignal)
+    return someApiCall({ abortSignal: signal });
+  },
+  {
+    timeoutMs: TIMEOUT_MS,
+    onTimeout: () => console.error('Operation timed out'),
+  },
+);
+```
+
+- **Pass the signal** into the underlying call when supported (e.g. Cohere `rerank(..., { abortSignal: signal })`, fetch `{ signal }`) so the request is actually cancelled.
+- **Catch timeout errors** in a try/catch; `withAbortTimeout` throws on timeout, so return a fallback (e.g. `null`) in the catch block if that’s the desired behavior.

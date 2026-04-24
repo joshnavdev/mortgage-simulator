@@ -1,0 +1,139 @@
+---
+description: "Auto-persist plans to .cursor/plans/. Trigger: Plan mode, implementation planning, architecture decisions, design specs, or any multi-step plan output."
+alwaysApply: false
+universal: true
+---
+
+# Plan Persistence
+
+## The Rule
+
+**Every plan you produce MUST be saved to `.cursor/plans/` as a markdown file.**
+
+This applies whenever you:
+- Are in Plan mode
+- Produce an implementation plan, architecture decision, or design spec
+- Break down a task into multiple steps
+- Propose a technical approach for a ticket or feature
+
+## File Naming
+
+Use this format: `<short_slug>_<8char_hash>.plan.md`
+
+- `short_slug`: 2-4 word snake_case description (e.g., `ticket_enforcement`, `quote_builder_refactor`)
+- `8char_hash`: First 8 chars of a hash for uniqueness (use the ticket ID if available, otherwise derive from the plan title)
+- Always end with `.plan.md`
+
+**If a Linear ticket is referenced**, include the ticket ID in the slug:
+- `ticket_123_feature.plan.md`
+- `ticket_456_fix.plan.md`
+
+## One Plan File Per Planning Session — ALWAYS UPDATE IN PLACE
+
+**CRITICAL: Do NOT create a new file each time the plan evolves.**
+
+When a planning session begins:
+1. **Check `.cursor/plans/` for an existing plan file** that matches the current topic (by ticket ID, slug, or subject matter)
+2. **If one exists**: READ it, then UPDATE it in place — merge new sections, update statuses, preserve older content
+3. **If none exists**: Create a new file
+
+### Preserving Older Content
+
+When updating a plan file as the conversation veers or scope changes:
+- **NEVER delete previous sections** unless the user explicitly says to remove them
+- **Add new sections** below existing ones with a clear heading
+- **Mark superseded decisions** with `~~strikethrough~~` and a note, rather than deleting them
+- **Update todo statuses** (pending → in_progress → completed → cancelled) rather than removing items
+- The plan file is a **living document** — it should reflect the full history of the planning session
+
+### Ask Before Creating a Second Plan File
+
+If you're unsure whether the current topic is the same plan or a genuinely new one:
+- **ASK the user**: "Should I update the existing plan (`<filename>`) or start a new one?"
+- Default to updating the existing plan unless told otherwise
+
+## File Format
+
+Use YAML frontmatter + markdown body. Follow this structure:
+
+```markdown
+---
+name: <Plan Title>
+ticket: <DC-XXXX if applicable>
+created: <YYYY-MM-DD>
+updated: <YYYY-MM-DD>
+overview: <1-2 sentence summary>
+todos:
+  - id: <kebab-case-id>
+    content: <Description of the task>
+    status: pending | in_progress | completed | cancelled
+  - id: <another-task>
+    content: <Description>
+    status: pending
+---
+
+# <Plan Title>
+
+<Overview paragraph>
+
+## Context / Problem
+
+<What problem does this solve? Why are we doing this?>
+
+## Approach
+
+<Technical approach, architecture decisions, trade-offs>
+
+## Implementation Steps
+
+### 1. <Step Name>
+
+<Details, code snippets, file paths>
+
+### 2. <Step Name>
+
+<Details>
+
+## Files to Modify
+
+- `path/to/file.ts` — <what changes>
+- `path/to/other.ts` — <what changes>
+
+## Files to Create
+
+- `path/to/new-file.ts` — <purpose>
+
+## Open Questions
+
+- <Anything unresolved>
+
+## Revision History
+
+- **YYYY-MM-DD**: Initial plan
+- **YYYY-MM-DD**: <What changed and why>
+```
+
+## File Enumeration (REQUIRED)
+
+**Every plan MUST enumerate every file intended to be modified**, with the specific change for each file. This is not optional.
+
+- Use a numbered table with file path and change description
+- Include exact line numbers when known
+- The list is a **minimum, not a maximum**:
+  - During implementation, if additional files need changes, **update the plan before editing them**
+  - If an enumerated file turns out not to need changes, **remove it from the plan and note why**
+- New files to be created must also be listed
+
+This prevents missed files during implementation and makes plans auditable.
+
+## When to Save
+
+- **Immediately** when you produce the first draft of a plan — don't wait for the conversation to end
+- **After each significant revision** during the planning session (new section, changed approach, updated todos)
+- **Before switching modes** (e.g., Plan → Agent) — ensure the latest version is on disk
+
+## Silent Operation
+
+- Save the file without excessive commentary. A brief one-liner is fine:
+  > "Saved plan to `.cursor/plans/ticket_123_feature.plan.md`"
+- Do NOT dump the entire plan contents into the chat AND the file — write it to the file, then reference it
