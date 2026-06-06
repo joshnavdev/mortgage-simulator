@@ -1,8 +1,4 @@
-import type {
-  FieldError,
-  RegisterOptions,
-  UseFormRegister,
-} from "react-hook-form";
+import type { FieldError, RegisterOptions, UseFormRegister } from "react-hook-form";
 import type { FormValues } from "@/lib/types";
 
 type InputProps = {

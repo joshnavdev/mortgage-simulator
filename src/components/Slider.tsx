@@ -51,11 +51,12 @@ export default function Slider({
           {suffix ? ` ${suffix}` : ""}
         </span>
       </div>
-      {hint && !error && 
+      {hint && !error && (
         <div className="input-hint-container">
           {hintLabel && <div className="input-hint">{hintLabel}</div>}
           <div className="input-hint">{hint}</div>
-        </div>}
+        </div>
+      )}
       {error && <div className="input-error">{error.message}</div>}
     </div>
   );

@@ -1,4 +1,4 @@
-import { Temporal } from 'temporal-polyfill';
+import { Temporal } from "temporal-polyfill";
 
 export interface ScheduleRow {
   number: number;
@@ -39,8 +39,8 @@ export default class MortgageCalculator {
     paymentTerm: number,
     td: number,
     tm: number,
-    portes: number = 3.80,
-    doublePaymentMonths: number[] = []
+    portes: number = 3.8,
+    doublePaymentMonths: number[] = [],
   ) {
     this.disbursementDate = disbursementDate;
     this.paymentDay = paymentDay;
@@ -58,8 +58,12 @@ export default class MortgageCalculator {
     this.tma = this.tm * 12;
   }
 
-  getDaysInPeriod(startDate: Temporal.PlainDate, endDate: Temporal.PlainDate, isFirstPeriod: boolean = false): number {
-    const days = startDate.until(endDate).total('days');
+  getDaysInPeriod(
+    startDate: Temporal.PlainDate,
+    endDate: Temporal.PlainDate,
+    isFirstPeriod: boolean = false,
+  ): number {
+    const days = startDate.until(endDate).total("days");
     return isFirstPeriod ? days + 1 : days;
   }
 
@@ -107,7 +111,8 @@ export default class MortgageCalculator {
       const isDouble = this.isDoublePaymentMonth(nextDate);
       const extraAmortization = isDouble ? cuota : 0;
 
-      const amortization = cuota - interest - desgravamen - propertyInsurance - this.portes + extraAmortization;
+      const amortization =
+        cuota - interest - desgravamen - propertyInsurance - this.portes + extraAmortization;
       totalAmortization += amortization;
       balance -= amortization;
 
@@ -137,7 +142,7 @@ export default class MortgageCalculator {
     }
     return this.round2((lo + hi) / 2);
   }
-  
+
   generateSchedule(): ScheduleRow[] {
     const schedule: ScheduleRow[] = [];
     let balance = this.loanAmount;
@@ -150,17 +155,21 @@ export default class MortgageCalculator {
       const days = this.getDaysInPeriod(currentDate, nextDate, isFirst);
 
       const desgravamen = this.round2(balance * this.getDesgravamenRate(days));
-      const propertyInsurance = this.round2(this.propertyAmount * this.getPropertyInsuranceRate(days));
+      const propertyInsurance = this.round2(
+        this.propertyAmount * this.getPropertyInsuranceRate(days),
+      );
       let interest = this.round2(balance * this.getInterestRate(days));
-      
-      if (interest > (cuota - desgravamen - propertyInsurance - this.portes)) {
+
+      if (interest > cuota - desgravamen - propertyInsurance - this.portes) {
         interest = cuota - desgravamen - propertyInsurance - this.portes;
       }
 
       const isDouble = this.isDoublePaymentMonth(nextDate);
       const extraAmortization = isDouble ? cuota : 0;
 
-      const amortization = this.round2(cuota - interest - desgravamen - propertyInsurance - this.portes + extraAmortization);
+      const amortization = this.round2(
+        cuota - interest - desgravamen - propertyInsurance - this.portes + extraAmortization,
+      );
       balance = this.round2(balance - amortization);
 
       const totalPayment = this.round2(cuota + extraAmortization);

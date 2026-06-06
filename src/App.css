@@ -112,6 +112,21 @@
   background: rgba(99, 102, 241, 0.2);
 }
 
+.saved__save-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+  color: #34d399;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.saved__save-btn.is-saved {
+  background: rgba(16, 185, 129, 0.2);
+}
+
 /* Compare panel */
 .compare {
   background: rgba(0, 0, 0, 0.3);
