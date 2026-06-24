@@ -28,6 +28,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_YNAB_CLIENT_ID: ${{ secrets.VITE_YNAB_CLIENT_ID }}
 
       - name: Deploy to gh-pages
         run: npx gh-pages -d dist -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
