@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import "./App.css";
 import Navbar, { type AppView } from "@/components/Navbar";
 import App from "@/App";
 import SalaryApp from "@/SalaryApp";
+import YnabApp from "@/YnabApp";
 
 export default function Root() {
   const [view, setView] = useState<AppView>("mortgage");
+
+  const views: Record<AppView, ReactNode> = {
+    mortgage: <App />,
+    salary: <SalaryApp />,
+    ynab: <YnabApp />,
+  };
 
   return (
     <div className="app">
@@ -15,7 +22,7 @@ export default function Root() {
       />
       <div className="app__container">
         <Navbar view={view} setView={setView} />
-        {view === "mortgage" ? <App /> : <SalaryApp />}
+        {views[view]}
       </div>
     </div>
   );

@@ -1,11 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
 import "./Navbar.css";
 
-export type AppView = "mortgage" | "salary";
+export type AppView = "mortgage" | "salary" | "ynab";
 
 const TABS: ReadonlyArray<{ key: AppView; label: string; icon: string }> = [
   { key: "mortgage", label: "Simulador Hipotecario", icon: "🏠" },
   { key: "salary", label: "Simulador de Sueldos", icon: "💵" },
+  { key: "ynab", label: "Integración YNAB", icon: "🔗" },
 ];
 
 type NavbarProps = {
