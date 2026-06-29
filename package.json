@@ -18,6 +18,7 @@
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.75.0",
     "temporal-polyfill": "^0.3.2",
+    "yet-another-react-lightbox": "^3.32.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

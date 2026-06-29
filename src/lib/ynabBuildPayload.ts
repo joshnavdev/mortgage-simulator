@@ -24,7 +24,10 @@ export function buildPayload(
   txns.forEach((txn) => {
     if (txn.amount === null) return;
 
-    const rawCategory = (txn.category ?? "").trim().toLowerCase();
+    const fullCategory = (txn.category ?? "").trim().toLowerCase();
+    const rawCategory = fullCategory.includes(">")
+      ? fullCategory.slice(fullCategory.lastIndexOf(">") + 1).trim()
+      : fullCategory;
     const categoryName = rawCategory === "split" ? "" : rawCategory;
     const categoryId = categoryName ? (categories.get(categoryName) ?? null) : null;
 
