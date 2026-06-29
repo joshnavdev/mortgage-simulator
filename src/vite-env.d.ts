@@ -7,6 +7,10 @@ interface ImportMetaEnv {
   readonly PROD: boolean;
   readonly SSR: boolean;
   readonly VITE_YNAB_CLIENT_ID?: string;
+  readonly VITE_YNAB_REDIRECT_URI?: string;
+  readonly VITE_COGNITO_CLIENT_ID?: string;
+  readonly VITE_COGNITO_REGION?: string;
+  readonly VITE_API_BASE_URL?: string;
 }
 
 interface ImportMeta {

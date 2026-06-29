@@ -30,6 +30,10 @@ jobs:
         run: npm run build
         env:
           VITE_YNAB_CLIENT_ID: ${{ secrets.VITE_YNAB_CLIENT_ID }}
+          VITE_YNAB_REDIRECT_URI: ${{ secrets.VITE_YNAB_REDIRECT_URI }}
+          VITE_COGNITO_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
+          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
 
       - name: Deploy to gh-pages
         run: npx gh-pages -d dist -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"

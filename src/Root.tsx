@@ -5,8 +5,13 @@ import App from "@/App";
 import SalaryApp from "@/SalaryApp";
 import YnabApp from "@/YnabApp";
 
+function getInitialView(): AppView {
+  if (window.location.search.includes("code=")) return "ynab";
+  return "mortgage";
+}
+
 export default function Root() {
-  const [view, setView] = useState<AppView>("mortgage");
+  const [view, setView] = useState<AppView>(getInitialView);
 
   const views: Record<AppView, ReactNode> = {
     mortgage: <App />,

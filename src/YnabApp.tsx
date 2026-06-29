@@ -1,86 +1,89 @@
 import { useCallback, useEffect, useState } from "react";
 import "./YnabApp.css";
 import {
+  clearSession,
+  getApiBaseUrl,
+  getCognitoConfig,
+  isSessionValid,
+  loadSession,
+  persistSession,
+  type CognitoSession,
+} from "@/lib/cognitoAuth";
+import {
   buildAuthorizeUrl,
-  buildRedirectUri,
-  clearSelectedBudget,
-  clearToken,
-  getClientId,
-  isTokenValid,
-  loadSelectedBudget,
-  loadToken,
-  parseYnabFragment,
-  persistSelectedBudget,
-  persistToken,
-  type YnabToken,
-} from "@/lib/ynabAuth";
-import { fetchBudgets, YnabUnauthorizedError, type YnabBudget } from "@/lib/ynabApi";
-import YnabTransactionsPanel from "@/components/YnabTransactionsPanel";
+  getRedirectUri,
+  getYnabClientId,
+  parseCallbackCode,
+  postYnabCallback,
+  YnabUnauthorizedError,
+} from "@/lib/ynabConnect";
+import LoginForm from "@/components/LoginForm";
 
 const YNAB_OFFICIAL_URL = "https://www.ynab.com";
 
 export default function YnabApp() {
-  const [token, setToken] = useState<YnabToken | null>(() => loadToken());
-  const [budgets, setBudgets] = useState<YnabBudget[]>([]);
-  const [selectedBudget, setSelectedBudget] = useState<YnabBudget | null>(() =>
-    loadSelectedBudget(),
-  );
-  const [loading, setLoading] = useState(false);
+  const [session, setSession] = useState<CognitoSession | null>(() => loadSession());
+  const [ynabConnected, setYnabConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cognitoConfig = getCognitoConfig();
+  const apiBase = getApiBaseUrl();
+  const ynabClientId = getYnabClientId();
+  const authenticated = session !== null && isSessionValid(session);
+
+  const handleSignOut = useCallback(() => {
+    clearSession();
+    setSession(null);
+    setYnabConnected(false);
+    setError(null);
+  }, []);
+
   useEffect(() => {
-    if (!window.location.hash.includes("access_token")) return;
-    const parsed = parseYnabFragment(window.location.hash);
-    if (parsed) {
-      persistToken(parsed);
-      setToken(parsed);
+    if (!window.location.search.includes("code=")) return;
+
+    const parsed = parseCallbackCode(window.location.search);
+    history.replaceState(null, "", window.location.pathname);
+
+    if (!parsed.ok) {
+      if (parsed.error !== null) setError(parsed.error);
+      return;
     }
-    history.replaceState(null, "", window.location.pathname + window.location.search);
-  }, []);
 
-  const clientId = getClientId();
-  const connected = token !== null && isTokenValid(token);
+    const activeSession = loadSession();
+    if (activeSession === null || !isSessionValid(activeSession) || apiBase === null) {
+      setError("Inicia sesión antes de conectar YNAB.");
+      return;
+    }
 
-  function handleConnect() {
-    if (!clientId) return;
-    window.location.assign(buildAuthorizeUrl(clientId, buildRedirectUri()));
+    setConnecting(true);
+    setError(null);
+    postYnabCallback(apiBase, activeSession.accessToken, parsed.code)
+      .then((result) => {
+        setYnabConnected(result.connected);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof YnabUnauthorizedError) {
+          handleSignOut();
+          setError("Tu sesión expiró. Inicia sesión de nuevo.");
+        } else {
+          setError(err instanceof Error ? err.message : "No se pudo conectar con YNAB.");
+        }
+      })
+      .finally(() => {
+        setConnecting(false);
+      });
+  }, [apiBase, handleSignOut]);
+
+  function handleAuthenticated(next: CognitoSession) {
+    persistSession(next);
+    setSession(next);
+    setError(null);
   }
 
-  const handleDisconnect = useCallback(() => {
-    clearToken();
-    clearSelectedBudget();
-    setToken(null);
-    setBudgets([]);
-    setSelectedBudget(null);
-    setError(null);
-  }, []);
-
-  const handleUnauthorized = useCallback(() => {
-    handleDisconnect();
-    setError("Tu sesión de YNAB expiró. Conéctate de nuevo.");
-  }, [handleDisconnect]);
-
-  async function handleFetchBudgets() {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchBudgets(token.accessToken);
-      setBudgets(result);
-    } catch (err) {
-      if (err instanceof YnabUnauthorizedError) {
-        handleUnauthorized();
-      } else {
-        setError(err instanceof Error ? err.message : "No se pudieron obtener los budgets.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleSelectBudget(budget: YnabBudget) {
-    setSelectedBudget(budget);
-    persistSelectedBudget(budget);
+  function handleConnectYnab() {
+    if (!ynabClientId) return;
+    window.location.assign(buildAuthorizeUrl(ynabClientId, getRedirectUri()));
   }
 
   return (
@@ -88,71 +91,47 @@ export default function YnabApp() {
       <div className="header">
         <div className="header__icon">🔗</div>
         <h1 className="header__title">Integración YNAB</h1>
-        <p className="header__subtitle">Conecta tu cuenta de YNAB para trabajar con tus budgets.</p>
+        <p className="header__subtitle">Inicia sesión y conecta tu cuenta de YNAB.</p>
       </div>
 
       <div className="card">
-        {!clientId ? (
+        {cognitoConfig === null || apiBase === null ? (
           <p className="ynab__notice">
-            Falta configurar la variable de entorno <code>VITE_YNAB_CLIENT_ID</code> con el Client
-            ID de tu aplicación OAuth de YNAB.
+            Falta configurar las variables de entorno <code>VITE_COGNITO_CLIENT_ID</code>,{" "}
+            <code>VITE_COGNITO_REGION</code> y <code>VITE_API_BASE_URL</code>.
           </p>
-        ) : !connected ? (
-          <button type="button" className="btn-primary" onClick={handleConnect}>
-            Conectar con YNAB
-          </button>
+        ) : !authenticated ? (
+          <>
+            <LoginForm config={cognitoConfig} onAuthenticated={handleAuthenticated} />
+            {error !== null && <p className="ynab__error">{error}</p>}
+          </>
         ) : (
           <div className="ynab__connected">
             <div className="ynab__status-row">
-              <span className="ynab__status">Conectado a YNAB</span>
-              <button type="button" className="ynab__disconnect" onClick={handleDisconnect}>
-                Desconectar
+              <span className="ynab__status">Sesión iniciada</span>
+              <button type="button" className="ynab__disconnect" onClick={handleSignOut}>
+                Cerrar sesión
               </button>
             </div>
 
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleFetchBudgets()}
-              disabled={loading}
-            >
-              {loading ? "Obteniendo budgets…" : "Obtener budgets"}
-            </button>
+            {!ynabClientId ? (
+              <p className="ynab__notice">
+                Falta configurar <code>VITE_YNAB_CLIENT_ID</code> para conectar con YNAB.
+              </p>
+            ) : ynabConnected ? (
+              <p className="ynab-txn__success">YNAB conectado correctamente.</p>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleConnectYnab}
+                disabled={connecting}
+              >
+                {connecting ? "Conectando con YNAB…" : "Conectar con YNAB"}
+              </button>
+            )}
 
             {error !== null && <p className="ynab__error">{error}</p>}
-
-            {budgets.length > 0 && (
-              <ul className="ynab__budgets">
-                {budgets.map((budget) => {
-                  const active = selectedBudget?.id === budget.id;
-                  return (
-                    <li key={budget.id}>
-                      <button
-                        type="button"
-                        className={"ynab__budget" + (active ? " is-active" : "")}
-                        onClick={() => handleSelectBudget(budget)}
-                      >
-                        {budget.name}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            {selectedBudget !== null && (
-              <p className="ynab__selected">
-                Budget seleccionado: <strong>{selectedBudget.name}</strong>
-              </p>
-            )}
-
-            {selectedBudget !== null && token !== null && (
-              <YnabTransactionsPanel
-                accessToken={token.accessToken}
-                budgetId={selectedBudget.id}
-                onUnauthorized={handleUnauthorized}
-              />
-            )}
           </div>
         )}
       </div>
