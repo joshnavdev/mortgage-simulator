@@ -1,6 +1,12 @@
-export const YNAB_API_BASE = "https://api.ynab.com/v1";
+import { getApiBaseUrl } from "@/lib/cognitoAuth";
 
 const REQUEST_TIMEOUT_MS = 15000;
+
+function getYnabProxyBase(): string {
+  const apiBase = getApiBaseUrl();
+  if (!apiBase) throw new Error("VITE_API_BASE_URL no está configurada.");
+  return `${apiBase}/ynab`;
+}
 
 const ALLOWED_ACCOUNT_TYPES: ReadonlySet<string> = new Set([
   "checking",
@@ -62,7 +68,7 @@ async function ynabRequest(
   path: string,
   init?: RequestInit,
 ): Promise<unknown> {
-  const response = await fetch(`${YNAB_API_BASE}${path}`, {
+  const response = await fetch(`${getYnabProxyBase()}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

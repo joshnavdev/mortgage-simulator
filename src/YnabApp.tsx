@@ -17,7 +17,9 @@ import {
   postYnabCallback,
   YnabUnauthorizedError,
 } from "@/lib/ynabConnect";
+import { fetchBudgets, type YnabBudget } from "@/lib/ynabApi";
 import LoginForm from "@/components/LoginForm";
+import YnabTransactionsPanel from "@/components/YnabTransactionsPanel";
 
 const YNAB_OFFICIAL_URL = "https://www.ynab.com";
 
@@ -26,6 +28,11 @@ export default function YnabApp() {
   const [ynabConnected, setYnabConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [budgets, setBudgets] = useState<YnabBudget[]>([]);
+  const [selectedBudgetId, setSelectedBudgetId] = useState("");
+  const [loadingBudgets, setLoadingBudgets] = useState(false);
+  const [budgetsError, setBudgetsError] = useState<string | null>(null);
 
   const cognitoConfig = getCognitoConfig();
   const apiBase = getApiBaseUrl();
@@ -36,8 +43,16 @@ export default function YnabApp() {
     clearSession();
     setSession(null);
     setYnabConnected(false);
+    setBudgets([]);
+    setSelectedBudgetId("");
+    setBudgetsError(null);
     setError(null);
   }, []);
+
+  const handleUnauthorized = useCallback(() => {
+    handleSignOut();
+    setError("Tu sesión expiró. Inicia sesión de nuevo.");
+  }, [handleSignOut]);
 
   useEffect(() => {
     if (!window.location.search.includes("code=")) return;
@@ -74,6 +89,31 @@ export default function YnabApp() {
         setConnecting(false);
       });
   }, [apiBase, handleSignOut]);
+
+  useEffect(() => {
+    if (!ynabConnected || !session || !isSessionValid(session)) return;
+    let active = true;
+    setLoadingBudgets(true);
+    setBudgetsError(null);
+
+    fetchBudgets(session.accessToken)
+      .then((result) => {
+        if (!active) return;
+        setBudgets(result);
+        if (result.length > 0) setSelectedBudgetId(result[0]?.id ?? "");
+      })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setBudgetsError(err instanceof Error ? err.message : "No se pudieron cargar los presupuestos.");
+      })
+      .finally(() => {
+        if (active) setLoadingBudgets(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [ynabConnected, session]);
 
   function handleAuthenticated(next: CognitoSession) {
     persistSession(next);
@@ -119,7 +159,43 @@ export default function YnabApp() {
                 Falta configurar <code>VITE_YNAB_CLIENT_ID</code> para conectar con YNAB.
               </p>
             ) : ynabConnected ? (
-              <p className="ynab-txn__success">YNAB conectado correctamente.</p>
+              <>
+                <p className="ynab-txn__success">YNAB conectado correctamente.</p>
+
+                {loadingBudgets ? (
+                  <p className="ynab-txn__hint">Cargando presupuestos…</p>
+                ) : budgetsError !== null ? (
+                  <p className="ynab__error">{budgetsError}</p>
+                ) : budgets.length === 0 ? (
+                  <p className="ynab-txn__hint">No se encontraron presupuestos.</p>
+                ) : (
+                  <>
+                    <label className="ynab-txn__label" htmlFor="ynab-budget">
+                      Presupuesto
+                    </label>
+                    <select
+                      id="ynab-budget"
+                      className="ynab-txn__select"
+                      value={selectedBudgetId}
+                      onChange={(e) => setSelectedBudgetId(e.target.value)}
+                    >
+                      {budgets.map((budget) => (
+                        <option key={budget.id} value={budget.id}>
+                          {budget.name}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+
+                {selectedBudgetId.length > 0 && session !== null && (
+                  <YnabTransactionsPanel
+                    accessToken={session.accessToken}
+                    budgetId={selectedBudgetId}
+                    onUnauthorized={handleUnauthorized}
+                  />
+                )}
+              </>
             ) : (
               <button
                 type="button"
