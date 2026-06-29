@@ -44,7 +44,7 @@ export type YnabCreateResult = {
 };
 
 export class YnabUnauthorizedError extends Error {
-  constructor(message = "El token de YNAB no es válido o expiró.") {
+  constructor(message = "Tu sesión expiró. Inicia sesión de nuevo.") {
     super(message);
     this.name = "YnabUnauthorizedError";
   }
@@ -110,9 +110,9 @@ function isBudget(value: unknown): value is YnabBudget {
 
 export async function fetchBudgets(accessToken: string): Promise<YnabBudget[]> {
   const payload = await ynabRequest(accessToken, "/plans");
-  const plans = getDataField(payload, "plans");
-  if (!Array.isArray(plans)) return [];
-  return plans.filter(isBudget).map((plan) => ({ id: plan.id, name: plan.name }));
+  const budgets = getDataField(payload, "budgets");
+  if (!Array.isArray(budgets)) return [];
+  return budgets.filter(isBudget).map((budget) => ({ id: budget.id, name: budget.name }));
 }
 
 type RawAccount = {
@@ -202,6 +202,6 @@ export async function createTransactions(
     method: "POST",
     body: JSON.stringify({ transactions: drafts }),
   });
-  const created = getDataField(payload, "transactions");
+  const created = getDataField(payload, "transaction_ids");
   return { created: Array.isArray(created) ? created.length : 0 };
 }

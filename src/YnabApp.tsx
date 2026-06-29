@@ -17,7 +17,11 @@ import {
   postYnabCallback,
   YnabUnauthorizedError,
 } from "@/lib/ynabConnect";
-import { fetchBudgets, type YnabBudget } from "@/lib/ynabApi";
+import {
+  fetchBudgets,
+  YnabUnauthorizedError as YnabApiUnauthorizedError,
+  type YnabBudget,
+} from "@/lib/ynabApi";
 import LoginForm from "@/components/LoginForm";
 import YnabTransactionsPanel from "@/components/YnabTransactionsPanel";
 
@@ -32,7 +36,7 @@ export default function YnabApp() {
   const [budgets, setBudgets] = useState<YnabBudget[]>([]);
   const [selectedBudgetId, setSelectedBudgetId] = useState("");
   const [loadingBudgets, setLoadingBudgets] = useState(false);
-  const [budgetsError, setBudgetsError] = useState<string | null>(null);
+  const [probing, setProbing] = useState(true);
 
   const cognitoConfig = getCognitoConfig();
   const apiBase = getApiBaseUrl();
@@ -45,7 +49,7 @@ export default function YnabApp() {
     setYnabConnected(false);
     setBudgets([]);
     setSelectedBudgetId("");
-    setBudgetsError(null);
+    setProbing(false);
     setError(null);
   }, []);
 
@@ -91,29 +95,39 @@ export default function YnabApp() {
   }, [apiBase, handleSignOut]);
 
   useEffect(() => {
-    if (!ynabConnected || !session || !isSessionValid(session)) return;
+    if (!session || !isSessionValid(session)) {
+      setProbing(false);
+      return;
+    }
+
     let active = true;
     setLoadingBudgets(true);
-    setBudgetsError(null);
 
     fetchBudgets(session.accessToken)
       .then((result) => {
         if (!active) return;
+        setYnabConnected(true);
         setBudgets(result);
-        if (result.length > 0) setSelectedBudgetId(result[0]?.id ?? "");
+        if (result.length > 0) setSelectedBudgetId((prev) => prev || (result[0]?.id ?? ""));
       })
       .catch((err: unknown) => {
         if (!active) return;
-        setBudgetsError(err instanceof Error ? err.message : "No se pudieron cargar los presupuestos.");
+        if (err instanceof YnabApiUnauthorizedError) {
+          handleUnauthorized();
+          return;
+        }
+        setYnabConnected(false);
       })
       .finally(() => {
-        if (active) setLoadingBudgets(false);
+        if (!active) return;
+        setLoadingBudgets(false);
+        setProbing(false);
       });
 
     return () => {
       active = false;
     };
-  }, [ynabConnected, session]);
+  }, [session, ynabConnected, handleUnauthorized]);
 
   function handleAuthenticated(next: CognitoSession) {
     persistSession(next);
@@ -164,8 +178,6 @@ export default function YnabApp() {
 
                 {loadingBudgets ? (
                   <p className="ynab-txn__hint">Cargando presupuestos…</p>
-                ) : budgetsError !== null ? (
-                  <p className="ynab__error">{budgetsError}</p>
                 ) : budgets.length === 0 ? (
                   <p className="ynab-txn__hint">No se encontraron presupuestos.</p>
                 ) : (
@@ -196,6 +208,8 @@ export default function YnabApp() {
                   />
                 )}
               </>
+            ) : probing ? (
+              <p className="ynab-txn__hint">Verificando conexión con YNAB…</p>
             ) : (
               <button
                 type="button"
